@@ -19,8 +19,11 @@ using namespace pros;
 #define ADI_WALL_L		71
 #define ADI_WALL_R		70
 
-#define CATA_STOP	34900
+#define CATA_STOP	35050
 #define PI			3.1416
+#define SKILL_CYCLE	4/*0000*/
+
+#define GYRO_ERR(gyro) gyro_err || gyro.get_heading() == PROS_ERR_F
 
 Controller master(E_CONTROLLER_MASTER);
 
@@ -34,12 +37,14 @@ Rotation c_rot(SENSOR_ROT);
 Vision vision(SENSOR_VIS);
 Imu gyro(SENSOR_GYRO);
 
-ADIDigitalOut _intake(ADI_INTAKE);
-ADIDigitalOut _wall_l(ADI_WALL_L);
-ADIDigitalOut _wall_r(ADI_WALL_R);
+ADIDigitalOut
+	_intake(ADI_INTAKE),
+	_wall_l(ADI_WALL_L),
+	_wall_r(ADI_WALL_R);
 
-int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_x = 0, btn_y = 0;
+int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_x = 0, btn_y = 0, gyro_err = 1;
 int int_m = 0, int_p = 0, cata = 0, cata_hold = 0, cata_stop = 0, wall = 0, dir = 1;
+int program = 0;
 
 double* _cos = (double*)0;
 vision_signature_s_t tri_sig1 =
@@ -48,21 +53,69 @@ vision_signature_s_t tri_sig2 =
 	Vision::signature_from_utility(2, -6241, -1133, -3688, -7117, -327, -3722, 1.000, 0);
 
 void initialize(void) {
+	lcd::initialize();
+	lcd::set_background_color(20, 20, 25);
+	lcd::set_text_color(220, 220, 220);
+	lcd::print(0, "Initializing...");
 	_cos = (double*)malloc(180 * sizeof(double));
 	for (int i = 0; i < 180; i++)
 		_cos[i] = cos((double)i * PI / 180.0);
 	c_rot.set_data_rate(50);
 	vision.set_signature(1, &tri_sig1);
 	vision.set_signature(2, &tri_sig2);
-	intake.set_brake_mode(E_MOTOR_BRAKE_COAST);
-	//gyro.reset(1);
+	lcd::clear_line(0);
+	lcd::print(0, "Calibrating IMU...");
+	lcd::print(1, "This process should take ~10 s");
+	for (int i = 0; i < 3;) {
+		gyro.reset(1);
+		delay(1000);
+		int roll = gyro.get_roll(),
+			pitch = gyro.get_pitch(),
+			yaw = gyro.get_yaw();
+		delay(4000);
+		if (absf(gyro.get_roll() - roll) > 1.0
+		 || absf(gyro.get_pitch() - pitch) > 1.0
+		 || absf(gyro.get_yaw() - yaw) > 0.5) {
+			lcd::clear_line(1);
+			lcd::print(1, "Attempt %d", ++i);
+			continue;
+		}
+		gyro_err = 0;
+		lcd::clear_line(0);
+		lcd::clear_line(1);
+		lcd::print(0, "Ready");
+		break;
+	}
+	if (gyro.get_rotation() == PROS_ERR_F) {
+		gyro_err = 1;
+		lcd::clear_line(0);
+		lcd::clear_line(1);
+		lcd::print(0, "IMU error during initialization");
+	}
+	lcd::clear_line(1);
+	lcd::print(1, "Selected program: FAR");
+	lcd::register_btn0_cb([] {
+		program = 0;
+		lcd::clear_line(1);
+		lcd::print(1, "Selected program: FAR");
+	});
+	lcd::register_btn1_cb([] {
+		program = 1;
+		lcd::clear_line(1);
+		lcd::print(1, "Selected program: NEAR");
+	});
+	lcd::register_btn2_cb([] {
+		program = 2;
+		lcd::clear_line(1);
+		lcd::print(1, "Selected program: SKILL");
+	});
 }
 
 void disabled(void) {}
 void competition_initialize(void) {}
 
 void autonomous(void) {
-	//movet(&drive, 2000, -rpm[E_MOTOR_GEAR_GREEN]);
+	unsigned itime = millis();
 	Task cata_ctrl {[] {
 		Motor tmp_cata_1(MOTOR_CATA1);
 		Motor tmp_cata_2(MOTOR_CATA2);
@@ -85,59 +138,137 @@ void autonomous(void) {
 	drive.tare_position();
 	vel_ctrl_t vc{};
 	vis_params_t vp{};
-	int_p = 1;
-	_intake.set_value(1);
-	movevc(&drive, &vc, 1025.0);
-	turn(&drive, &vc, 0.0, -110);
-	vel_ctrl(&drive, &vc);
-	intake = -127;
-	delay(300);
-	_intake.set_value(0);
-	movet(&drive, 700, (int)rpm[E_MOTOR_GEAR_GREEN]);
-	intake = 0;
-	cata_ctrl.notify();
-	vp = {
-		-rpm[E_MOTOR_GEAR_GREEN] / 4.0,
-		-rpm[E_MOTOR_GEAR_GREEN],
-		
-		40, 0, 0, 0,
-		0, 0,
-		0, 250, 0, 0,
-		
-		1, 0, 0, 0,
-		0, 0, 0, 0,
-		0, 1, 0, 0,
-		1, 50
-	};
-	track(&drive, &vision, &vp);
-	_intake.set_value(1);
-	intake = 127;
-	movet(&drive, 575, (int)rpm[E_MOTOR_GEAR_GREEN]);
-	delay(200);
-	//if (gyro.get_heading() != PROS_ERR_F)
-	//	turnh_(&drive, &gyro, 160, (int)rpm[E_MOTOR_GEAR_GREEN]);
-	//else
-		turnvc(&drive, &vc, 0.0, -185);
-	movevc(&drive, &vc, 587.5);
-	turnvc(&drive, &vc, 0.0, 45);
-	movet(&drive, 750, (int)rpm[E_MOTOR_GEAR_GREEN]);
-	cata_1 = 127;
-	cata_2 = 127;
-	movet(&drive, 500, (int)rpm[E_MOTOR_GEAR_GREEN] / 3);
-	delay(1000);
-	movevc(&drive, &vc, -50.0);
-	cata_1 = 0;
-	cata_2 = 0;
-	turnvc(&drive, &vc, 0.0, 80);
-	drive.move_velocity(-rpm[E_MOTOR_GEAR_GREEN] / 2);
+	switch (program) {
+		case 0:
+			_intake.set_value(1);
+			int_p = 1;
+			movevc(&drive, &vc, 1032.5);
+			turnvc(&drive, &vc, 0.0, -100);
+			intake = -127;
+			delay(300);
+			//_intake.set_value(0);
+			movet(&drive, 700, rpm[E_MOTOR_GEAR_GREEN]);
+			intake = 0;
+			cata_ctrl.notify();
+			vp = {
+				-rpm[E_MOTOR_GEAR_GREEN] / 4,
+				-rpm[E_MOTOR_GEAR_GREEN],
+				
+				40, 0, 0, 0,
+				0, 0,
+				0, 250, 0, 0,
+				
+				1, 0, 0, 0,
+				0, 0, 0, 0,
+				0, 1, 0, 0,
+				1, 100
+			};
+			track(&drive, &vision, &vp);
+			//_intake.set_value(1);
+			intake = 127;
+			delay(100);
+			movevc(&drive, &vc, 400.0);
+			movevc(&drive, &vc, -200.0);
+			delay(100);
+			if (GYRO_ERR(gyro))
+				turnvc(&drive, &vc, 0.0, -185);
+			else
+				turnh(&drive, &gyro, 165.0, rpm[E_MOTOR_GEAR_GREEN] * 2 / 3);
+			movevc(&drive, &vc, 225.0);
+			if (GYRO_ERR(gyro))
+				turnvc(&drive, &vc, 0.0, 50);
+			else
+				turnh(&drive, &gyro, gyro.get_rotation() + 50, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 750, rpm[E_MOTOR_GEAR_GREEN]);
+			cata_1 = 127;
+			cata_2 = 127;
+			movet(&drive, 250, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			cata_ctrl.notify();
+			movet(&drive, 1250, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			delay(500);
+			if (GYRO_ERR(gyro))
+				turnvc(&drive, &vc, 0.0, 20);
+			else
+				turnh(&drive, &gyro, gyro.get_rotation() + 10, rpm[E_MOTOR_GEAR_GREEN]);
+			delay(500);
+			for (int i = 0; i++ < 15; delay(50)) {
+				cata_1 = 127;
+				cata_2 = 127;
+			}
+			if (GYRO_ERR(gyro))
+				turnvc(&drive, &vc, 0.0, 40);
+			else
+				turnh(&drive, &gyro, gyro.get_rotation() + 40, rpm[E_MOTOR_GEAR_GREEN]);
+			cata_1 = 0;
+			cata_2 = 0;
+			movet(&drive, 1375, -rpm[E_MOTOR_GEAR_GREEN]);
+			_intake.set_value(0);
+			int_p = 0;
+			break;
+		case 1:
+			_intake.set_value(1);
+			int_p = 1;
+			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, gyro.get_rotation() + 20, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 700, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, -75, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 300, -rpm[E_MOTOR_GEAR_GREEN]);
+			intake = 127;
+			movet(&drive, 800, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			delay(500);
+			turnh(&drive, &gyro, gyro.get_rotation() - 40, rpm[E_MOTOR_GEAR_GREEN]);
+			intake = -127;
+			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
+			intake = 0;
+			_intake.set_value(0);
+			int_p = 0;
+			break;
+		case 2:
+			_intake.set_value(1);
+			int_p = 1;
+			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, -90, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+			drive.rf.move_velocity(5);
+			drive.rr.move_velocity(5);
+			cata_1 = 127;
+			cata_2 = 127;
+			delay(SKILL_CYCLE);
+			turnh(&drive, &gyro, 100, rpm[E_MOTOR_GEAR_GREEN]);
+			cata_1 = 0;
+			cata_2 = 0;
+			movet(&drive, 2500, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, 60, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 5000, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 500, -rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, gyro.get_heading() + 180, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
+			break;
+	}
 	drive.lf.set_brake_mode(def_brake);
 	drive.rf.set_brake_mode(def_brake);
 	drive.lr.set_brake_mode(def_brake);
 	drive.rr.set_brake_mode(def_brake);
+	lcd::print(7, "Auto execution time: %d ms", millis() - itime);
 }
 
 void opcontrol(void) {
 	drive.move_velocity(0);
+	if (program == 2) {
+		_intake.set_value(1);
+		int_p = 1;
+		movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
+		movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+		movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
+		movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
+		turnh(&drive, &gyro, -90, rpm[E_MOTOR_GEAR_GREEN]);
+		movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+	}
 	for (;; delay(10)) {
 		int l_stick = master.get_analog(E_CONTROLLER_ANALOG_LEFT_Y);
 		int r_stick = master.get_analog(E_CONTROLLER_ANALOG_RIGHT_X);
@@ -158,8 +289,13 @@ void opcontrol(void) {
 		} else if (btn_l1 && !master.get_digital(E_CONTROLLER_DIGITAL_L1))
 			btn_l1 = 0;
 		*/
-		if (master.get_digital(E_CONTROLLER_DIGITAL_L1))
+		if (master.get_digital(E_CONTROLLER_DIGITAL_L1)) {
 			intake = 127;
+			cata_hold = 1;
+			cata_stop = 1;
+			cata_1 = 100;
+			cata_2 = 100;
+		}
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_L2))
 			intake = -127;
 		else
@@ -201,8 +337,10 @@ void opcontrol(void) {
 			}
 		} else if (btn_r2 && !master.get_digital(E_CONTROLLER_DIGITAL_R2))
 			btn_r2 = 0;
-		if (cata && !l_stick && !r_stick)
-			drive.move_velocity(20);
+		if (cata && !l_stick && !r_stick) {
+			drive.lf.move_velocity(5);
+			drive.lr.move_velocity(5);
+		}
 		else if (!cata && !l_stick && !r_stick)
 			drive.move_velocity(0);
 		if (cata_stop) {
@@ -236,5 +374,7 @@ void opcontrol(void) {
 			dir = 1;
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_DOWN))
 			dir = -1;
+		lcd::print(3, "CATA_1: %5.0f deg C", cata_1.get_temperature());
+		lcd::print(4, "CATA_2: %5.0f deg C", cata_2.get_temperature());
 	}
 }

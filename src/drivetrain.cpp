@@ -42,13 +42,13 @@ void Drivetrain::tare_position() {
     rr.tare_position();
 }
 
-constexpr double absf(double num) {
+double absf(double num) {
     return num * ((num > 0.0) - (num < 0.0));
 }
 
 void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist) {
     double pos = dist * 360.0 / CIRC;
-    double vel = rpm[E_MOTOR_GEAR_GREEN] * (2 * (dist > 0.0) - 1);
+    int vel = rpm[E_MOTOR_GEAR_GREEN] * (2 * (dist > 0.0) - 1);
     vc->tgt_l = pos;
     vc->tgt_r = pos;
     vc->vel_l = vel;
@@ -89,7 +89,7 @@ void turn(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
     double rad = sqrt(dist * dist / (2.0 - 2.0 * _cos[theta]));
     double out = PI * (rad + WIDTH / 2.0) * fsign * (double)theta / 180.0;
     double in = PI * (rad - WIDTH / 2.0) * fsign * (double)theta / 180.0;
-    double vel = rpm[E_MOTOR_GEAR_GREEN] * in / out;
+    double vel = (double)rpm[E_MOTOR_GEAR_GREEN] * in / out;
     vc->tgt_l = flip ? out : in;
     vc->tgt_r = flip ? in : out;
     vc->vel_l = fsign * (flip ? rpm[E_MOTOR_GEAR_GREEN] : vel);
@@ -98,25 +98,30 @@ void turn(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
 }
 
 void turnh(Drivetrain* motors, Imu* gyro, double heading, int vel) {
+    for (;;) {
+        if (absf(gyro->get_rotation() - (heading + 360.0)) < absf(gyro->get_rotation() - heading))
+            heading += 360.0;
+        else if (absf(gyro->get_rotation() - (heading - 360.0)) < absf(gyro->get_rotation() - heading))
+            heading -= 360.0;
+        else
+            break;
+    }
+    int sign = (2 * (heading > gyro->get_rotation()) - 1);
+    vel = abs(vel) * sign;
     motors->lf.move_velocity(vel);
     motors->rf.move_velocity(-vel);
     motors->lr.move_velocity(vel);
     motors->rr.move_velocity(-vel);
-    for (; absf(heading - gyro->get_heading()) > 20.0
-        && absf(heading - gyro->get_heading()) < 340.0; delay(5));
+    for (; sign * (heading - gyro->get_rotation()) > 65.0; delay(10));
+    vel *= 0.2;
+    motors->lf.move_velocity(vel);
+    motors->rf.move_velocity(-vel);
+    motors->lr.move_velocity(vel);
+    motors->rr.move_velocity(-vel);
+    for (; sign * (heading - gyro->get_rotation()) > 5.0; delay(10));
     motors->move_velocity(0);
     delay(50);
     motors->tare_position();
-}
-
-void turnh_(Drivetrain* motors, Imu* gyro, double heading, int vel) {
-    int current = gyro->get_heading();
-    if (current > 355.0)
-        current = 0;
-    if (heading < current)
-        heading += 360.0;
-    vel = abs(vel) * (2 * (heading - current < 180) - 1);
-    turnh(motors, gyro, heading, vel);
 }
 
 void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {
@@ -140,12 +145,12 @@ void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {
         else
             new_r = vc->vel_r;
         if (new_l != last_l) {
-            motors->lf.move_velocity(new_l);
-            motors->lr.move_velocity(new_l);
+            motors->lf.move_velocity((int)new_l);
+            motors->lr.move_velocity((int)new_l);
         }
         if (new_r != last_r) {
-            motors->rf.move_velocity(new_r);
-            motors->rr.move_velocity(new_r);
+            motors->rf.move_velocity((int)new_r);
+            motors->rr.move_velocity((int)new_r);
         }
         last_l = new_l;
         last_r = new_r;

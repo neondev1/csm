@@ -31,8 +31,8 @@ typedef struct {
     };
  */
 typedef struct {
-    double vel_l = 0.0;
-    double vel_r = 0.0;
+    int vel_l = 0.0;
+    int vel_r = 0.0;
     int wmin = 0, wmax = 0;
     int hmin = 0, hmax = 0;
     int left = 0, top = 0;
@@ -48,11 +48,13 @@ typedef struct {
     int dly = 0;
 } vis_params_t;
 
-const double rpm[3] = {
-    100.0, 200.0, 600.0
+const int rpm[3] = {
+    100, 200, 600
 };
 
 extern double* _cos;
+
+double absf(double num);
 
 void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist);
 void movet(Drivetrain* motors, int time, int vel);
@@ -60,7 +62,6 @@ void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist);
 void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
 void turn(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
 void turnh(Drivetrain* motors, pros::Imu* gyro, double dir, int vel);
-void turnh_(Drivetrain* motors, pros::Imu* gyro, double dir, int vel);
 void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc);
 void track(Drivetrain* motors, pros::Vision* vision, vis_params_t* vp);
 
