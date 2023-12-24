@@ -21,7 +21,7 @@ using namespace pros;
 
 #define CATA_STOP	35050
 #define PI			3.1416
-#define SKILL_CYCLE	4/*0000*/
+#define SKILL_CYCLE	40000
 
 #define GYRO_ERR(gyro) gyro_err || gyro.get_heading() == PROS_ERR_F
 
@@ -93,16 +93,16 @@ void initialize(void) {
 		lcd::print(0, "IMU error during initialization");
 	}
 	lcd::clear_line(1);
-	lcd::print(1, "Selected program: FAR");
+	lcd::print(1, "Selected program: NEAR");
 	lcd::register_btn0_cb([] {
 		program = 0;
 		lcd::clear_line(1);
-		lcd::print(1, "Selected program: FAR");
+		lcd::print(1, "Selected program: NEAR");
 	});
 	lcd::register_btn1_cb([] {
 		program = 1;
 		lcd::clear_line(1);
-		lcd::print(1, "Selected program: NEAR");
+		lcd::print(1, "Selected program: FAR");
 	});
 	lcd::register_btn2_cb([] {
 		program = 2;
@@ -161,7 +161,7 @@ void autonomous(void) {
 				1, 0, 0, 0,
 				0, 0, 0, 0,
 				0, 1, 0, 0,
-				1, 100
+				1, 500, 100
 			};
 			track(&drive, &vision, &vp);
 			//_intake.set_value(1);
@@ -170,40 +170,55 @@ void autonomous(void) {
 			movevc(&drive, &vc, 400.0);
 			movevc(&drive, &vc, -200.0);
 			delay(100);
+			/*
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, -185);
 			else
-				turnh(&drive, &gyro, 165.0, rpm[E_MOTOR_GEAR_GREEN] * 2 / 3);
+			*/
+			turnh(&drive, &gyro, 165.0, rpm[E_MOTOR_GEAR_GREEN] * 2 / 3);
 			movevc(&drive, &vc, 225.0);
+			/*
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, 50);
 			else
-				turnh(&drive, &gyro, gyro.get_rotation() + 50, rpm[E_MOTOR_GEAR_GREEN]);
+			*/
+			turnh(&drive, &gyro, gyro.get_rotation() + 50, rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 750, rpm[E_MOTOR_GEAR_GREEN]);
 			cata_1 = 127;
 			cata_2 = 127;
 			movet(&drive, 250, rpm[E_MOTOR_GEAR_GREEN] / 2);
 			cata_ctrl.notify();
-			movet(&drive, 1250, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 1125, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 250, rpm[E_MOTOR_GEAR_GREEN] / 3);
 			delay(500);
+			/*
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, 20);
 			else
-				turnh(&drive, &gyro, gyro.get_rotation() + 10, rpm[E_MOTOR_GEAR_GREEN]);
+			*/
+			turnh(&drive, &gyro, gyro.get_rotation() + 10, rpm[E_MOTOR_GEAR_GREEN]);
 			delay(500);
 			for (int i = 0; i++ < 15; delay(50)) {
 				cata_1 = 127;
 				cata_2 = 127;
 			}
+			cata_1 = 0;
+			cata_2 = 0;
+			/* Violates rule - needs revision
 			if (GYRO_ERR(gyro))
-				turnvc(&drive, &vc, 0.0, 40);
+				turnvc(&drive, &vc, 0.0, 45);
 			else
 				turnh(&drive, &gyro, gyro.get_rotation() + 40, rpm[E_MOTOR_GEAR_GREEN]);
 			cata_1 = 0;
 			cata_2 = 0;
-			movet(&drive, 1375, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 1400, -rpm[E_MOTOR_GEAR_GREEN]);
 			_intake.set_value(0);
 			int_p = 0;
+			*/ // Revised version:
+			turnh(&drive, &gyro, gyro.get_rotation() - 130, rpm[E_MOTOR_GEAR_GREEN]);
+			_intake.set_value(0);
+			int_p = 0;
+			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
 			break;
 		case 1:
 			_intake.set_value(1);
@@ -218,14 +233,23 @@ void autonomous(void) {
 			delay(500);
 			turnh(&drive, &gyro, gyro.get_rotation() - 40, rpm[E_MOTOR_GEAR_GREEN]);
 			intake = -127;
+			/* Violates rule - needs revision
 			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 0;
 			_intake.set_value(0);
 			int_p = 0;
+			*/ // Revised version:
+			delay(500);
+			intake = 0;
+			turnh(&drive, &gyro, gyro.get_rotation() + 180, rpm[E_MOTOR_GEAR_GREEN]);
+			_intake.set_value(0);
+			int_p = 0;
+			movet(&drive, 1500, rpm[E_MOTOR_GEAR_GREEN]);
 			break;
 		case 2:
 			_intake.set_value(1);
 			int_p = 1;
+			intake = -127;
 			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
@@ -234,9 +258,12 @@ void autonomous(void) {
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 			drive.rf.move_velocity(5);
 			drive.rr.move_velocity(5);
-			cata_1 = 127;
-			cata_2 = 127;
-			delay(SKILL_CYCLE);
+			for (int i = 0; i++ < SKILL_CYCLE / 10; delay(10)) {         
+				cata_1 = 127;
+				cata_2 = 127;
+				lcd::print(3, "CATA_1: %5d mA", cata_1.get_current_draw());
+				lcd::print(4, "CATA_2: %5d mA", cata_2.get_current_draw());
+			}
 			turnh(&drive, &gyro, 100, rpm[E_MOTOR_GEAR_GREEN]);
 			cata_1 = 0;
 			cata_2 = 0;
@@ -248,6 +275,7 @@ void autonomous(void) {
 			turnh(&drive, &gyro, gyro.get_heading() + 180, rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
+			intake = 127;
 			break;
 	}
 	drive.lf.set_brake_mode(def_brake);
@@ -338,8 +366,13 @@ void opcontrol(void) {
 		} else if (btn_r2 && !master.get_digital(E_CONTROLLER_DIGITAL_R2))
 			btn_r2 = 0;
 		if (cata && !l_stick && !r_stick) {
-			drive.lf.move_velocity(5);
-			drive.lr.move_velocity(5);
+			if (program < 2) {
+				drive.lf.move_velocity(5);
+				drive.lr.move_velocity(5);
+			} else {
+				drive.rf.move_velocity(5);
+				drive.rr.move_velocity(5);
+			}
 		}
 		else if (!cata && !l_stick && !r_stick)
 			drive.move_velocity(0);

@@ -164,6 +164,7 @@ void track(Drivetrain* motors, Vision* vision, vis_params_t* vp) {
     motors->rf.move_velocity(vp->vel_r);
     motors->lr.move_velocity(vp->vel_l);
     motors->rr.move_velocity(vp->vel_r);
+    delay(vp->pre);
     for (; (vp->wmin_flag && vision->get_by_size(0).width < vp->wmin)
         || (vp->wmax_flag && vision->get_by_size(0).width > vp->wmax)
         || (vp->hmin_flag && vision->get_by_size(0).height < vp->hmin)
@@ -177,7 +178,7 @@ void track(Drivetrain* motors, Vision* vision, vis_params_t* vp) {
         || (vp->ya_flag && vision->get_by_size(0).y_middle_coord < vp->ctrya)
         || (vp->yb_flag && vision->get_by_size(0).y_middle_coord > vp->ctryb)
         || (vp->obj_flag && vision->get_object_count() < 1); delay(10));
-    delay(vp->dly);
+    delay(vp->post);
     motors->move_velocity(0);
     motors->tare_position();
 }

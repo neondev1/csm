@@ -28,6 +28,7 @@ typedef struct {
         // wmin_flag, wmax_flag, hmin_flag, hmax_flag,
         // l_flag, r_flag, t_flag, b_flag,
         // xa_flag, xb_flag, ya_flag, yb_flag
+        // obj_flag, 
     };
  */
 typedef struct {
@@ -45,7 +46,7 @@ typedef struct {
     int xa_flag = 0, xb_flag = 0;
     int ya_flag = 0, yb_flag = 0;
     int obj_flag = 0;
-    int dly = 0;
+    int pre, post = 0;
 } vis_params_t;
 
 const int rpm[3] = {
