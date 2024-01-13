@@ -73,12 +73,12 @@ void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist) {
 
 void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
     *vc = {};
-    turn(motors, vc, dist, angle);
+    turnm(motors, vc, dist, angle);
     vel_ctrl(motors, vc);
     delay(50);
 }
 
-void turn(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
+void turnm(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
     int theta = abs(angle);
     int dir = angle > 0;
     if (!theta || (theta >= 180 && dist))
@@ -122,6 +122,10 @@ void turnh(Drivetrain* motors, Imu* gyro, double heading, int vel) {
     motors->move_velocity(0);
     delay(50);
     motors->tare_position();
+}
+
+void turn(Drivetrain* motors, Imu* gyro, double angle, int vel) {
+    turnh(motors, gyro, gyro->get_rotation() + angle, vel);
 }
 
 void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {

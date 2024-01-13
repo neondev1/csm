@@ -61,8 +61,9 @@ void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist);
 void movet(Drivetrain* motors, int time, int vel);
 void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist);
 void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
-void turn(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
-void turnh(Drivetrain* motors, pros::Imu* gyro, double dir, int vel);
+void turnm(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
+void turnh(Drivetrain* motors, pros::Imu* gyro, double dir, int vel = 200);
+void turn(Drivetrain* motors, pros::Imu* gyro, double angle, int vel = 200);
 void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc);
 void track(Drivetrain* motors, pros::Vision* vision, vis_params_t* vp);
 

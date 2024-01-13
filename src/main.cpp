@@ -15,13 +15,17 @@ using namespace pros;
 #define SENSOR_VIS		9
 #define SENSOR_GYRO		10
 
-#define ADI_INTAKE		72
-#define ADI_WALL_L		71
-#define ADI_WALL_R		70
+#define ADI_INTAKE		65
+#define ADI_CLIMB		66
+// #define ADI_WALL_L	71
+// #define ADI_WALL_R	70
 
-#define CATA_STOP	35050
+#define CATA_STOP	35100
 #define PI			3.1416
 #define SKILL_CYCLE	40000
+
+// #define DISABLE_IMU
+#define SKILL_DEBUG
 
 #define GYRO_ERR(gyro) gyro_err || gyro.get_heading() == PROS_ERR_F
 
@@ -39,8 +43,11 @@ Imu gyro(SENSOR_GYRO);
 
 ADIDigitalOut
 	_intake(ADI_INTAKE),
+	_climb(ADI_CLIMB);
+/*
 	_wall_l(ADI_WALL_L),
 	_wall_r(ADI_WALL_R);
+*/
 
 int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_x = 0, btn_y = 0, gyro_err = 1;
 int int_m = 0, int_p = 0, cata = 0, cata_hold = 0, cata_stop = 0, wall = 0, dir = 1;
@@ -65,8 +72,10 @@ void initialize(void) {
 	vision.set_signature(2, &tri_sig2);
 	lcd::clear_line(0);
 	lcd::print(0, "Calibrating IMU...");
-	lcd::print(1, "This process should take ~10 s");
-	for (int i = 0; i < 3;) {
+	lcd::print(1, "This process should take <10 s");
+#ifndef DISABLE_IMU
+	int i;
+	for (i = 0; i < 3;) {
 		gyro.reset(1);
 		delay(1000);
 		int roll = gyro.get_roll(),
@@ -86,7 +95,8 @@ void initialize(void) {
 		lcd::print(0, "Ready");
 		break;
 	}
-	if (gyro.get_rotation() == PROS_ERR_F) {
+#endif
+	if (i == 3 || gyro.get_rotation() == PROS_ERR_F) {
 		gyro_err = 1;
 		lcd::clear_line(0);
 		lcd::clear_line(1);
@@ -95,19 +105,31 @@ void initialize(void) {
 	lcd::clear_line(1);
 	lcd::print(1, "Selected program: NEAR");
 	lcd::register_btn0_cb([] {
+		Imu tmp_gyro(SENSOR_GYRO);
 		program = 0;
 		lcd::clear_line(1);
+		gyro.tare_rotation();
 		lcd::print(1, "Selected program: NEAR");
+		delay(1000);
+		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
 	});
 	lcd::register_btn1_cb([] {
+		Imu tmp_gyro(SENSOR_GYRO);
 		program = 1;
 		lcd::clear_line(1);
+		gyro.tare_rotation();
 		lcd::print(1, "Selected program: FAR");
+		delay(1000);
+		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
 	});
 	lcd::register_btn2_cb([] {
+		Imu tmp_gyro(SENSOR_GYRO);
 		program = 2;
 		lcd::clear_line(1);
+		gyro.tare_rotation();
 		lcd::print(1, "Selected program: SKILL");
+		delay(1000);
+		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
 	});
 }
 
@@ -115,7 +137,7 @@ void disabled(void) {}
 void competition_initialize(void) {}
 
 void autonomous(void) {
-	unsigned itime = millis();
+	int itime = (int)millis();
 	Task cata_ctrl {[] {
 		Motor tmp_cata_1(MOTOR_CATA1);
 		Motor tmp_cata_2(MOTOR_CATA2);
@@ -138,16 +160,17 @@ void autonomous(void) {
 	drive.tare_position();
 	vel_ctrl_t vc{};
 	vis_params_t vp{};
+	gyro.tare_rotation();
 	switch (program) {
 		case 0:
 			_intake.set_value(1);
 			int_p = 1;
-			movevc(&drive, &vc, 1032.5);
+			movevc(&drive, &vc, 1100.0);
 			turnvc(&drive, &vc, 0.0, -100);
 			intake = -127;
 			delay(300);
 			//_intake.set_value(0);
-			movet(&drive, 700, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 800, rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 0;
 			cata_ctrl.notify();
 			vp = {
@@ -161,13 +184,13 @@ void autonomous(void) {
 				1, 0, 0, 0,
 				0, 0, 0, 0,
 				0, 1, 0, 0,
-				1, 500, 100
+				1, 500, 75
 			};
 			track(&drive, &vision, &vp);
 			//_intake.set_value(1);
 			intake = 127;
 			delay(100);
-			movevc(&drive, &vc, 400.0);
+			movevc(&drive, &vc, 375.0);
 			movevc(&drive, &vc, -200.0);
 			delay(100);
 			/*
@@ -175,36 +198,38 @@ void autonomous(void) {
 				turnvc(&drive, &vc, 0.0, -185);
 			else
 			*/
-			turnh(&drive, &gyro, 165.0, rpm[E_MOTOR_GEAR_GREEN] * 2 / 3);
-			movevc(&drive, &vc, 225.0);
+			turnh(&drive, &gyro, 165, rpm[E_MOTOR_GEAR_GREEN] * 2 / 3);
+			movevc(&drive, &vc, 250.0);
 			/*
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, 50);
 			else
 			*/
-			turnh(&drive, &gyro, gyro.get_rotation() + 50, rpm[E_MOTOR_GEAR_GREEN]);
-			movet(&drive, 750, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, 50);
 			cata_1 = 127;
 			cata_2 = 127;
-			movet(&drive, 250, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 1000, rpm[E_MOTOR_GEAR_GREEN]);
 			cata_ctrl.notify();
-			movet(&drive, 1125, rpm[E_MOTOR_GEAR_GREEN] / 2);
-			movet(&drive, 250, rpm[E_MOTOR_GEAR_GREEN] / 3);
+			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 350, rpm[E_MOTOR_GEAR_GREEN] / 3);
 			delay(500);
 			/*
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, 20);
 			else
 			*/
-			turnh(&drive, &gyro, gyro.get_rotation() + 10, rpm[E_MOTOR_GEAR_GREEN]);
-			delay(500);
-			for (int i = 0; i++ < 15; delay(50)) {
+			movet(&drive, 100, -rpm[E_MOTOR_GEAR_GREEN]);
+			delay(200);
+			turn(&drive, &gyro, 15);
+			delay(300);
+			for (int i = 0; i++ < 5; delay(50)) {
 				cata_1 = 127;
 				cata_2 = 127;
 			}
 			cata_1 = 0;
 			cata_2 = 0;
-			/* Violates rule - needs revision
+			delay(100);
+			/* Violates rule - revised
 			if (GYRO_ERR(gyro))
 				turnvc(&drive, &vc, 0.0, 45);
 			else
@@ -214,34 +239,35 @@ void autonomous(void) {
 			movet(&drive, 1400, -rpm[E_MOTOR_GEAR_GREEN]);
 			_intake.set_value(0);
 			int_p = 0;
-			*/ // Revised version:
-			turnh(&drive, &gyro, gyro.get_rotation() - 130, rpm[E_MOTOR_GEAR_GREEN]);
+			*/
+			turn(&drive, &gyro, -130);
 			_intake.set_value(0);
 			int_p = 0;
-			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 1200, rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 300, rpm[E_MOTOR_GEAR_GREEN] / 2);
 			break;
 		case 1:
 			_intake.set_value(1);
 			int_p = 1;
 			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
-			turnh(&drive, &gyro, gyro.get_rotation() + 20, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, 20);
 			movet(&drive, 700, rpm[E_MOTOR_GEAR_GREEN]);
-			turnh(&drive, &gyro, -75, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, -75);
 			movet(&drive, 300, -rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 127;
 			movet(&drive, 800, rpm[E_MOTOR_GEAR_GREEN] / 2);
 			delay(500);
-			turnh(&drive, &gyro, gyro.get_rotation() - 40, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, -40);
 			intake = -127;
-			/* Violates rule - needs revision
+			/* Violates rule - revised
 			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 0;
 			_intake.set_value(0);
 			int_p = 0;
-			*/ // Revised version:
+			*/
 			delay(500);
 			intake = 0;
-			turnh(&drive, &gyro, gyro.get_rotation() + 180, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, 180);
 			_intake.set_value(0);
 			int_p = 0;
 			movet(&drive, 1500, rpm[E_MOTOR_GEAR_GREEN]);
@@ -254,16 +280,22 @@ void autonomous(void) {
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
-			turnh(&drive, &gyro, -90, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, -90);
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 			drive.rf.move_velocity(5);
 			drive.rr.move_velocity(5);
+#ifndef SKILL_DEBUG
 			for (int i = 0; i++ < SKILL_CYCLE / 10; delay(10)) {         
 				cata_1 = 127;
 				cata_2 = 127;
 				lcd::print(3, "CATA_1: %5d mA", cata_1.get_current_draw());
 				lcd::print(4, "CATA_2: %5d mA", cata_2.get_current_draw());
 			}
+#else
+			delay(100);
+			itime -= 39900;
+#endif
+			/* Old code that keeps getting stuck on the bar :(
 			turnh(&drive, &gyro, 100, rpm[E_MOTOR_GEAR_GREEN]);
 			cata_1 = 0;
 			cata_2 = 0;
@@ -276,6 +308,37 @@ void autonomous(void) {
 			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 127;
+			*/
+			turn(&drive, &gyro, -50);
+			movevc(&drive, &vc, -680.0);
+			intake = 0;
+			turn(&drive, &gyro, 32);
+			movevc(&drive, &vc, -1700.0);
+			turnvc(&drive, &vc, -800.0, 90);
+			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
+			movet(&drive, 400, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, -90);
+			movevc(&drive, &vc, 300.0);
+			turn(&drive, &gyro, -15);
+			turnvc(&drive, &vc, 1000.0, -65);
+			turnh(&drive, &gyro, 273);
+			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			turnh(&drive, &gyro, 273);
+			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
+			movevc(&drive, &vc, 1000);
+			turnh(&drive, &gyro, 160);
+			movevc(&drive, &vc, 1250);
+			turnh(&drive, &gyro, 227);
+			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN] / 2);
+			turnh(&drive, &gyro, 227);
+			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
+			movevc(&drive, &vc, 1000);
+			turnh(&drive, &gyro, 160);
+			movevc(&drive, &vc, -700);
+			turnh(&drive, &gyro, 250);
+			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
 			break;
 	}
 	drive.lf.set_brake_mode(def_brake);
@@ -366,7 +429,16 @@ void opcontrol(void) {
 		} else if (btn_r2 && !master.get_digital(E_CONTROLLER_DIGITAL_R2))
 			btn_r2 = 0;
 		if (cata && !l_stick && !r_stick) {
+// #ifndef SKILL_DEBUG
 			if (program < 2) {
+/*
+#else
+			if (program == 1) {
+#endif // SKILL_DEBUG
+#if 0
+}
+#endif
+*/
 				drive.lf.move_velocity(5);
 				drive.lr.move_velocity(5);
 			} else {
@@ -397,12 +469,12 @@ void opcontrol(void) {
 		if (!btn_x && master.get_digital(E_CONTROLLER_DIGITAL_X)) {
 			btn_x = 1;
 			wall = !wall;
-			_wall_l.set_value(wall);
-			_wall_r.set_value(wall);
+			//_wall_l.set_value(wall);
+			//_wall_r.set_value(wall);
 		} else if (btn_x && !master.get_digital(E_CONTROLLER_DIGITAL_X))
 			btn_x = 0;
-		//if (master.get_digital(E_CONTROLLER_DIGITAL_RIGHT))
-		//	autonomous();
+		if (master.get_digital(E_CONTROLLER_DIGITAL_RIGHT))
+			autonomous();
 		if (master.get_digital(E_CONTROLLER_DIGITAL_UP))
 			dir = 1;
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_DOWN))
