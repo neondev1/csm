@@ -17,12 +17,15 @@ using namespace pros;
 
 #define ADI_INTAKE		65
 #define ADI_CLIMB		66
+#define ADI_WALL		67
+#define ADI_BALANCE		68
 // #define ADI_WALL_L	71
 // #define ADI_WALL_R	70
 
-#define CATA_STOP	35100
-#define PI			3.1416
-#define SKILL_CYCLE	40000
+#define CATA_STOP		35500
+#define CATA_STOP_VEL	112
+#define PI				3.1416
+#define SKILL_CYCLE		40000
 
 // #define DISABLE_IMU
 #define SKILL_DEBUG
@@ -43,13 +46,11 @@ Imu gyro(SENSOR_GYRO);
 
 ADIDigitalOut
 	_intake(ADI_INTAKE),
-	_climb(ADI_CLIMB);
-/*
-	_wall_l(ADI_WALL_L),
-	_wall_r(ADI_WALL_R);
-*/
+	_climb(ADI_CLIMB),
+	_wall(ADI_WALL),
+	_balance(ADI_BALANCE);
 
-int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_x = 0, btn_y = 0, gyro_err = 1;
+int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_b = 0, btn_x = 0, btn_y = 0, gyro_err = 1;
 int int_m = 0, int_p = 0, cata = 0, cata_hold = 0, cata_stop = 0, wall = 0, dir = 1;
 int program = 0;
 
@@ -144,8 +145,8 @@ void autonomous(void) {
 		Rotation tmp_c_rot(SENSOR_ROT);
 		for (;; delay(10)) {
 			Task::notify_take(1, TIMEOUT_MAX);
-			tmp_cata_1 = 100;
-			tmp_cata_2 = 100;
+			tmp_cata_1 = CATA_STOP_VEL;
+			tmp_cata_2 = CATA_STOP_VEL;
 			for (; tmp_c_rot.get_angle() != PROS_ERR
 			   && (tmp_c_rot.get_angle() < 30000 || tmp_c_rot.get_angle() > CATA_STOP); delay(10));
 			tmp_cata_1 = 30;
@@ -384,8 +385,8 @@ void opcontrol(void) {
 			intake = 127;
 			cata_hold = 1;
 			cata_stop = 1;
-			cata_1 = 100;
-			cata_2 = 100;
+			cata_1 = CATA_STOP_VEL;
+			cata_2 = CATA_STOP_VEL;
 		}
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_L2))
 			intake = -127;
@@ -403,8 +404,8 @@ void opcontrol(void) {
 				cata_2 = 127;
 			} else if (cata_hold) {
 				cata_stop = 1;
-				cata_1 = 100;
-				cata_2 = 100;
+				cata_1 = CATA_STOP_VEL;
+				cata_2 = CATA_STOP_VEL;
 			} else {
 				cata_stop = 0;
 				cata_1 = 0;
@@ -418,8 +419,8 @@ void opcontrol(void) {
 			if (!cata) {
 				if (cata_hold) {
 					cata_stop = 1;
-					cata_1 = 100;
-					cata_2 = 100;
+					cata_1 = CATA_STOP_VEL;
+					cata_2 = CATA_STOP_VEL;
 				} else {
 					cata_stop = 0;
 					cata_1 = 0;
@@ -464,15 +465,32 @@ void opcontrol(void) {
 			btn_a = 1;
 			int_p = !int_p;
 			_intake.set_value(int_p);
+			_climb.set_value(0);
 		} else if (btn_a && !master.get_digital(E_CONTROLLER_DIGITAL_A))
 			btn_a = 0;
+		if (!btn_b && master.get_digital(E_CONTROLLER_DIGITAL_B)) {
+			btn_b = 1;
+			if (int_p) {
+				_intake.set_value(0);
+				_climb.set_value(0);
+			}
+			else {
+				int_p = 1;
+				_intake.set_value(1);
+				_climb.set_value(1);
+			}
+		} else if (btn_b && !master.get_digital(E_CONTROLLER_DIGITAL_B))
+			btn_b = 0;
 		if (!btn_x && master.get_digital(E_CONTROLLER_DIGITAL_X)) {
 			btn_x = 1;
 			wall = !wall;
+			_wall.set_value(wall);
 			//_wall_l.set_value(wall);
 			//_wall_r.set_value(wall);
 		} else if (btn_x && !master.get_digital(E_CONTROLLER_DIGITAL_X))
 			btn_x = 0;
+		if (master.get_digital(E_CONTROLLER_DIGITAL_Y))
+			_balance.set_value(1);
 		if (master.get_digital(E_CONTROLLER_DIGITAL_RIGHT))
 			autonomous();
 		if (master.get_digital(E_CONTROLLER_DIGITAL_UP))
