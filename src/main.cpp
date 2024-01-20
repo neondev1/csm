@@ -1,3 +1,6 @@
+#include <atomic>
+#include <iomanip>
+#include <sstream>
 #include "main.h"
 #include "head.h"
 
@@ -25,10 +28,11 @@ using namespace pros;
 #define CATA_STOP		35500
 #define CATA_STOP_VEL	112
 #define PI				3.1416
-#define SKILL_CYCLE		40000
+#define SKILL_CYCLE		29000
 
 // #define DISABLE_IMU
-#define SKILL_DEBUG
+// #define SKILL_DEBUG
+// #define AUTON_TESTER
 
 #define GYRO_ERR(gyro) gyro_err || gyro.get_heading() == PROS_ERR_F
 
@@ -40,7 +44,7 @@ Motor
 	cata_2(MOTOR_CATA2, E_MOTOR_GEAR_RED, 0),
 	intake(MOTOR_INTAKE, E_MOTOR_GEAR_BLUE, 0);
 
-Rotation c_rot(SENSOR_ROT);
+Rotation rot(SENSOR_ROT);
 Vision vision(SENSOR_VIS);
 Imu gyro(SENSOR_GYRO);
 
@@ -52,15 +56,27 @@ ADIDigitalOut
 
 int btn_l1 = 0, btn_r1 = 0, btn_r2 = 0, btn_a = 0, btn_b = 0, btn_x = 0, btn_y = 0, gyro_err = 1;
 int int_m = 0, int_p = 0, cata = 0, cata_hold = 0, cata_stop = 0, wall = 0, dir = 1;
-int program = 0;
+std::atomic<int> program;
+std::atomic<int> auton;
+std::atomic<int> driver;
+char* name;
 
 double* _cos = (double*)0;
-vision_signature_s_t tri_sig1 =
-	Vision::signature_from_utility(1, -6311, -1093, -3702, -6471, -2387, -4429, 1.000, 0);
-vision_signature_s_t tri_sig2 =
-	Vision::signature_from_utility(2, -6241, -1133, -3688, -7117, -327, -3722, 1.000, 0);
+vision_signature_s_t
+	tri_sig1 =
+		Vision::signature_from_utility(1, -6311, -1093, -3702, -6471, -2387, -4429, 1.000, 0),
+	tri_sig2 =
+		Vision::signature_from_utility(2, -6241, -1133, -3688, -7117, -327, -3722, 1.000, 0);
 
 void initialize(void) {
+	driver = 0;
+	auton = 0;
+	program = 0;
+	name = "NEAR ";
+	master.clear();
+	delay(50);
+	master.set_text(0, 0, "init");
+	delay(500);
 	lcd::initialize();
 	lcd::set_background_color(20, 20, 25);
 	lcd::set_text_color(220, 220, 220);
@@ -68,13 +84,15 @@ void initialize(void) {
 	_cos = (double*)malloc(180 * sizeof(double));
 	for (int i = 0; i < 180; i++)
 		_cos[i] = cos((double)i * PI / 180.0);
-	c_rot.set_data_rate(50);
+	rot.set_data_rate(50);
 	vision.set_signature(1, &tri_sig1);
 	vision.set_signature(2, &tri_sig2);
 	lcd::clear_line(0);
+#ifndef DISABLE_IMU
+	master.set_text(1, 0, "imu");
+	delay(50);
 	lcd::print(0, "Calibrating IMU...");
 	lcd::print(1, "This process should take <10 s");
-#ifndef DISABLE_IMU
 	int i;
 	for (i = 0; i < 3;) {
 		gyro.reset(1);
@@ -82,7 +100,25 @@ void initialize(void) {
 		int roll = gyro.get_roll(),
 			pitch = gyro.get_pitch(),
 			yaw = gyro.get_yaw();
-		delay(4000);
+		for (int j = 0; j++ < 400; delay(10)) {
+			if (master.get_digital(E_CONTROLLER_DIGITAL_UP)
+			  && master.get_digital(E_CONTROLLER_DIGITAL_DOWN)
+			  && master.get_digital(E_CONTROLLER_DIGITAL_LEFT)
+			  && master.get_digital(E_CONTROLLER_DIGITAL_RIGHT)) {
+				gyro_err = 1;
+				lcd::clear_line(0);
+				lcd::clear_line(1);
+				lcd::print(0, "IMU calibration cancelled");
+				master.set_text(2, 0, "cancel");
+				i = -2;
+#ifdef AUTON_TESTER
+				for (; master.get_digital(E_CONTROLLER_DIGITAL_RIGHT););
+#endif // AUTON_TESTER
+				break;
+			}
+		}
+		if (i < 0)
+			break;
 		if (absf(gyro.get_roll() - roll) > 1.0
 		 || absf(gyro.get_pitch() - pitch) > 1.0
 		 || absf(gyro.get_yaw() - yaw) > 0.5) {
@@ -94,6 +130,7 @@ void initialize(void) {
 		lcd::clear_line(0);
 		lcd::clear_line(1);
 		lcd::print(0, "Ready");
+		master.set_text(2, 0, "done");
 		break;
 	}
 #endif
@@ -102,14 +139,79 @@ void initialize(void) {
 		lcd::clear_line(0);
 		lcd::clear_line(1);
 		lcd::print(0, "IMU error during initialization");
+		master.set_text(2, 0, "fail");
 	}
+	delay(500);
+	master.clear();
+	delay(50);
 	lcd::clear_line(1);
 	lcd::print(1, "Selected program: NEAR");
+	Task info {[] {
+		Controller tmp_master(E_CONTROLLER_MASTER);
+		Motor tmp_cata_1(MOTOR_CATA1), tmp_cata_2(MOTOR_CATA2);
+		Imu tmp_gyro(SENSOR_GYRO);
+		master.clear();
+		delay(50);
+		std::ostringstream oss;
+		oss.str("");
+		for (;; delay(100)) {
+			if (driver) {
+				oss.str("");
+				oss.clear();
+				break;
+			}
+			if (!auton) {
+				if (tmp_master.get_digital(E_CONTROLLER_DIGITAL_LEFT))
+					program = 0;
+				else if (tmp_master.get_digital(E_CONTROLLER_DIGITAL_UP))
+					program = 1;
+				else if (tmp_master.get_digital(E_CONTROLLER_DIGITAL_RIGHT))
+					program = 2;
+				if (tmp_master.get_digital(E_CONTROLLER_DIGITAL_DOWN))
+					tmp_gyro.tare_rotation();
+			}
+			switch (program) {
+				case 0:
+					name = "NEAR ";
+					break;
+				case 1:
+					name = "FAR ";
+					break;
+				case 2:
+					name = "SKILL ";
+					break;
+			}
+			oss << (program == 2 ? "2:00 " : "1:45 ") << name << std::setw(3) << battery::get_capacity() << "%";
+			tmp_master.set_text(0, 0, oss.str());
+			oss.str("");
+			oss.clear();
+			delay(50);
+			oss << "CATA 1/" << (int)tmp_cata_1.get_temperature()
+				<<    "c 2/" << (int)tmp_cata_2.get_temperature() << "c";
+			tmp_master.set_text(1, 0, oss.str());
+			oss.str("");
+			oss.clear();
+			delay(50);
+			tmp_master.clear_line(2);
+			if (!auton) {
+				delay(50);
+				double rotation = absf(tmp_gyro.get_rotation());
+				if (rotation < 1.0)
+					oss << "IMU " << std::setprecision(2) << rotation << " 28101A";
+				else
+					oss << "IMU ERR 28101A";
+				tmp_master.set_text(2, 0, oss.str());
+				oss.str("");
+				oss.clear();
+			}
+		}
+	}};
 	lcd::register_btn0_cb([] {
 		Imu tmp_gyro(SENSOR_GYRO);
 		program = 0;
 		lcd::clear_line(1);
 		gyro.tare_rotation();
+		name = "NEAR ";
 		lcd::print(1, "Selected program: NEAR");
 		delay(1000);
 		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
@@ -119,6 +221,7 @@ void initialize(void) {
 		program = 1;
 		lcd::clear_line(1);
 		gyro.tare_rotation();
+		name = "FAR ";
 		lcd::print(1, "Selected program: FAR");
 		delay(1000);
 		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
@@ -128,6 +231,7 @@ void initialize(void) {
 		program = 2;
 		lcd::clear_line(1);
 		gyro.tare_rotation();
+		name = "SKILL ";
 		lcd::print(1, "Selected program: SKILL");
 		delay(1000);
 		lcd::print(6, "IMU rotation: %5f", tmp_gyro.get_rotation());
@@ -138,17 +242,19 @@ void disabled(void) {}
 void competition_initialize(void) {}
 
 void autonomous(void) {
-	int itime = (int)millis();
+	auton = 1;
+	int start = (int)millis();
 	Task cata_ctrl {[] {
-		Motor tmp_cata_1(MOTOR_CATA1);
-		Motor tmp_cata_2(MOTOR_CATA2);
-		Rotation tmp_c_rot(SENSOR_ROT);
+		Motor tmp_cata_1(MOTOR_CATA1), tmp_cata_2(MOTOR_CATA2);
+		Rotation tmp_rot(SENSOR_ROT);
 		for (;; delay(10)) {
 			Task::notify_take(1, TIMEOUT_MAX);
 			tmp_cata_1 = CATA_STOP_VEL;
 			tmp_cata_2 = CATA_STOP_VEL;
-			for (; tmp_c_rot.get_angle() != PROS_ERR
-			   && (tmp_c_rot.get_angle() < 30000 || tmp_c_rot.get_angle() > CATA_STOP); delay(10));
+			for (; tmp_rot.get_angle() != PROS_ERR
+			   && (tmp_rot.get_angle() < 30000 || tmp_rot.get_angle() > CATA_STOP); delay(10));
+			if (tmp_rot.get_angle() == PROS_ERR)
+				delay(1000);
 			tmp_cata_1 = 30;
 			tmp_cata_2 = 30;
 		}
@@ -248,16 +354,18 @@ void autonomous(void) {
 			movet(&drive, 300, rpm[E_MOTOR_GEAR_GREEN] / 2);
 			break;
 		case 1:
+			// Currently broken
 			_intake.set_value(1);
 			int_p = 1;
 			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
 			turn(&drive, &gyro, 20);
 			movet(&drive, 700, rpm[E_MOTOR_GEAR_GREEN]);
-			turnh(&drive, &gyro, -75);
+			turnh(&drive, &gyro, -90);
 			movet(&drive, 300, -rpm[E_MOTOR_GEAR_GREEN]);
 			intake = 127;
 			movet(&drive, 800, rpm[E_MOTOR_GEAR_GREEN] / 2);
 			delay(500);
+			movet(&drive, 100, -rpm[E_MOTOR_GEAR_GREEN]);
 			turn(&drive, &gyro, -40);
 			intake = -127;
 			/* Violates rule - revised
@@ -269,6 +377,8 @@ void autonomous(void) {
 			delay(500);
 			intake = 0;
 			turn(&drive, &gyro, 180);
+			movet(&drive, 300, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, 50);
 			_intake.set_value(0);
 			int_p = 0;
 			movet(&drive, 1500, rpm[E_MOTOR_GEAR_GREEN]);
@@ -276,13 +386,14 @@ void autonomous(void) {
 		case 2:
 			_intake.set_value(1);
 			int_p = 1;
-			intake = -127;
 			movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
-			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
-			turnh(&drive, &gyro, -90);
 			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, 15);
+			movet(&drive, 650, rpm[E_MOTOR_GEAR_GREEN]);
+			turnh(&drive, &gyro, -90);
+			movet(&drive, 350, rpm[E_MOTOR_GEAR_GREEN]);
 			drive.rf.move_velocity(5);
 			drive.rr.move_velocity(5);
 #ifndef SKILL_DEBUG
@@ -294,7 +405,7 @@ void autonomous(void) {
 			}
 #else
 			delay(100);
-			itime -= 39900;
+			start -= SKILL_CYCLE - 100;
 #endif
 			/* Old code that keeps getting stuck on the bar :(
 			turnh(&drive, &gyro, 100, rpm[E_MOTOR_GEAR_GREEN]);
@@ -311,33 +422,38 @@ void autonomous(void) {
 			intake = 127;
 			*/
 			turn(&drive, &gyro, -50);
-			movevc(&drive, &vc, -680.0);
+			movevc(&drive, &vc, -700.0);
 			intake = 0;
-			turn(&drive, &gyro, 32);
-			movevc(&drive, &vc, -1700.0);
-			turnvc(&drive, &vc, -800.0, 90);
+			turn(&drive, &gyro, 25);
+			cata_ctrl.notify();
+			movevc(&drive, &vc, -1600.0);
+			cata_1 = 0;
+			cata_2 = 0;
+			turnvc(&drive, &vc, -750.0, 90);
 			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
 			movet(&drive, 400, rpm[E_MOTOR_GEAR_GREEN]);
-			turn(&drive, &gyro, -90);
-			movevc(&drive, &vc, 300.0);
 			turn(&drive, &gyro, -15);
-			turnvc(&drive, &vc, 1000.0, -65);
-			turnh(&drive, &gyro, 273);
-			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] / 2);
+			movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+			turn(&drive, &gyro, -75);
+			movevc(&drive, &vc, 500.0);
+			turn(&drive, &gyro, -15);
+			turnvc(&drive, &vc, 900.0, -65);
+			turnh(&drive, &gyro, 275);
+			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] * 3 / 5);
 			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN] / 2);
-			turnh(&drive, &gyro, 273);
-			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
-			movevc(&drive, &vc, 1000);
-			turnh(&drive, &gyro, 160);
-			movevc(&drive, &vc, 1250);
-			turnh(&drive, &gyro, 227);
-			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] / 2);
+			turnh(&drive, &gyro, 275);
+			movet(&drive, 800, -rpm[E_MOTOR_GEAR_GREEN]);
+			movevc(&drive, &vc, 800);
+			turnh(&drive, &gyro, 165);
+			movevc(&drive, &vc, 1075);
+			turnh(&drive, &gyro, 220);
+			movet(&drive, 1100, -rpm[E_MOTOR_GEAR_GREEN] * 3 / 5);
 			movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN] / 2);
-			turnh(&drive, &gyro, 227);
-			movet(&drive, 1500, -rpm[E_MOTOR_GEAR_GREEN]);
-			movevc(&drive, &vc, 1000);
+			turnh(&drive, &gyro, 220);
+			movet(&drive, 800, -rpm[E_MOTOR_GEAR_GREEN]);
+			movevc(&drive, &vc, 800);
 			turnh(&drive, &gyro, 160);
-			movevc(&drive, &vc, -700);
+			movevc(&drive, &vc, -650);
 			turnh(&drive, &gyro, 250);
 			movet(&drive, 1000, -rpm[E_MOTOR_GEAR_GREEN]);
 			break;
@@ -346,21 +462,48 @@ void autonomous(void) {
 	drive.rf.set_brake_mode(def_brake);
 	drive.lr.set_brake_mode(def_brake);
 	drive.rr.set_brake_mode(def_brake);
-	lcd::print(7, "Auto execution time: %d ms", millis() - itime);
+	lcd::print(7, "Auto execution time: %d ms", millis() - start);
 }
 
 void opcontrol(void) {
 	drive.move_velocity(0);
+	driver = 1;
 	if (program == 2) {
 		_intake.set_value(1);
 		int_p = 1;
 		movet(&drive, 1200, -rpm[E_MOTOR_GEAR_GREEN]);
 		movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
 		movet(&drive, 400, -rpm[E_MOTOR_GEAR_GREEN]);
-		movet(&drive, 500, rpm[E_MOTOR_GEAR_GREEN]);
-		turnh(&drive, &gyro, -90, rpm[E_MOTOR_GEAR_GREEN]);
 		movet(&drive, 200, rpm[E_MOTOR_GEAR_GREEN]);
+		turn(&drive, &gyro, 15);
+		movet(&drive, 650, rpm[E_MOTOR_GEAR_GREEN]);
+		turnh(&drive, &gyro, -90);
+		movet(&drive, 350, rpm[E_MOTOR_GEAR_GREEN]);
 	}
+	Task info {[] {
+		Controller tmp_master(E_CONTROLLER_MASTER);
+		Motor tmp_cata_1(MOTOR_CATA1), tmp_cata_2(MOTOR_CATA2);
+		std::ostringstream oss;
+		oss.str("");
+		int start = millis();
+		int total = program == 2 ? 60 : 105;
+		for (;; delay(100)) {
+			int time = total - (millis() - start) / 1000;
+			if (time < 0)
+				time = 0;
+			oss << time / 60 << ":" << std::setfill('0') << std::setw(2) << time % 60
+				<< " " << name << std::setfill(' ') << std::setw(3) << battery::get_capacity() << "%";
+			tmp_master.set_text(0, 0, oss.str());
+			oss.str("");
+			oss.clear();
+			delay(50);
+			oss << "CATA 1/" << (int)tmp_cata_1.get_temperature()
+				<<    "c 2/" << (int)tmp_cata_2.get_temperature() << "c";
+			tmp_master.set_text(1, 0, oss.str());
+			oss.str("");
+			oss.clear();
+		}
+	}};
 	for (;; delay(10)) {
 		int l_stick = master.get_analog(E_CONTROLLER_ANALOG_LEFT_Y);
 		int r_stick = master.get_analog(E_CONTROLLER_ANALOG_RIGHT_X);
@@ -450,8 +593,8 @@ void opcontrol(void) {
 		else if (!cata && !l_stick && !r_stick)
 			drive.move_velocity(0);
 		if (cata_stop) {
-			if (c_rot.get_angle() == PROS_ERR
-			|| (c_rot.get_angle() > 30000 && c_rot.get_angle() < CATA_STOP)) {
+			if (rot.get_angle() == PROS_ERR
+			|| (rot.get_angle() > 30000 && rot.get_angle() < CATA_STOP)) {
 				cata_1 = 30;
 				cata_2 = 30;
 				cata_stop = 0;
@@ -470,17 +613,29 @@ void opcontrol(void) {
 			btn_a = 0;
 		if (!btn_b && master.get_digital(E_CONTROLLER_DIGITAL_B)) {
 			btn_b = 1;
+			int_p = !int_p;
 			if (int_p) {
-				_intake.set_value(0);
-				_climb.set_value(0);
-			}
-			else {
-				int_p = 1;
 				_intake.set_value(1);
 				_climb.set_value(1);
 			}
+			else {
+				int_p = 1;
+				_intake.set_value(0);
+				_climb.set_value(0);
+			}
 		} else if (btn_b && !master.get_digital(E_CONTROLLER_DIGITAL_B))
 			btn_b = 0;
+		if (!btn_y && master.get_digital(E_CONTROLLER_DIGITAL_Y)) {
+			btn_y = 1;
+			cata_hold = 1;
+			cata_stop = 1;
+			cata_1 = CATA_STOP_VEL;
+			cata_2 = CATA_STOP_VEL;
+			_climb.set_value(1);
+			delay(200);
+			_climb.set_value(0);
+		} else if (btn_y && !master.get_digital(E_CONTROLLER_DIGITAL_Y))
+			btn_y = 0;
 		if (!btn_x && master.get_digital(E_CONTROLLER_DIGITAL_X)) {
 			btn_x = 1;
 			wall = !wall;
@@ -489,10 +644,14 @@ void opcontrol(void) {
 			//_wall_r.set_value(wall);
 		} else if (btn_x && !master.get_digital(E_CONTROLLER_DIGITAL_X))
 			btn_x = 0;
+		/*
 		if (master.get_digital(E_CONTROLLER_DIGITAL_Y))
 			_balance.set_value(1);
+		*/
+#ifdef AUTON_TESTER
 		if (master.get_digital(E_CONTROLLER_DIGITAL_RIGHT))
 			autonomous();
+#endif // AUTON_TESTER
 		if (master.get_digital(E_CONTROLLER_DIGITAL_UP))
 			dir = 1;
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_DOWN))
