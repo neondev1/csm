@@ -6,14 +6,21 @@
 class Drivetrain {
 public:
     Drivetrain(int lf, int rf, int lr, int rr);
+    void decel(int vel);
+    void move_l(int vel);
+    void move_r(int vel);
     void move_velocity(int vel);
     void tare_position(void);
     pros::Motor lf, rf, lr, rr;
 };
 
 typedef struct {
+    // Target position
     double tgt_l = 0.0, tgt_r = 0.0;
+    // Target velocity
     double vel_l = 0.0, vel_r = 0.0;
+    // Deceleration factors
+    double fact_1 = 0.8, fact_2 = 0.5;
 } vel_ctrl_t;
 
 /*
@@ -49,22 +56,24 @@ typedef struct {
     int pre, post = 0;
 } vis_params_t;
 
+#define R pros::E_MOTOR_GEAR_RED
+#define G pros::E_MOTOR_GEAR_GREEN
+#define B pros::E_MOTOR_GEAR_BLUE
+
 const int rpm[3] = {
     100, 200, 600
 };
 
 extern double* _cos;
 
-double absf(double num);
-
 void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist);
-void movet(Drivetrain* motors, int time, int vel);
-void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist);
-void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
+void movet(Drivetrain* motors, int time, int vel, short brake = 0b11);
+void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist, short brake = 0b11);
+void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle, short brake = 0b11);
 void turnm(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle);
-void turnh(Drivetrain* motors, pros::Imu* gyro, double dir, int vel = 200);
-void turn(Drivetrain* motors, pros::Imu* gyro, double angle, int vel = 200);
-void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc);
+void turnh(Drivetrain* motors, pros::Imu* gyro, double dir, int vel = rpm[G]);
+void turn(Drivetrain* motors, pros::Imu* gyro, double angle, int vel = rpm[G]);
+void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc, short brake = 0b11);
 void track(Drivetrain* motors, pros::Vision* vision, vis_params_t* vp);
 
 #endif // CSM_HEAD_H_

@@ -28,6 +28,22 @@ Drivetrain::Drivetrain(int lf, int rf, int lr, int rr) :
     ;;                                                                               ;;
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+void Drivetrain::decel(int vel) {
+    this->move_velocity(0);
+    delay(50);
+    this->move_velocity(vel);
+}
+
+void Drivetrain::move_l(int vel) {
+    lf.move_velocity(vel);
+    lr.move_velocity(vel);
+}
+
+void Drivetrain::move_r(int vel) {
+    rf.move_velocity(vel);
+    rr.move_velocity(vel);
+}
+
 void Drivetrain::move_velocity(int vel) {
     lf.move_velocity(vel);
     rf.move_velocity(vel);
@@ -42,13 +58,22 @@ void Drivetrain::tare_position() {
     rr.tare_position();
 }
 
-double absf(double num) {
-    return num * ((num > 0.0) - (num < 0.0));
+// Moves the robot in one direction for a certain length of time
+void movet(Drivetrain* motors, int time, int vel, short brake) {
+    motors->move_velocity(vel);
+    delay(time);
+    if (brake & 0b10)
+        motors->move_l(0);
+    if (brake & 0b01)
+        motors->move_r(0);
+    delay(50);
+    motors->tare_position();
 }
 
+// Moves the robot in one direction for a certain distance; must call `vel_ctrl`
 void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist) {
     double pos = dist * 360.0 / CIRC;
-    int vel = rpm[E_MOTOR_GEAR_GREEN] * (2 * (dist > 0.0) - 1);
+    int vel = rpm[G] * (2 * (dist > 0.0) - 1);
     vc->tgt_l = pos;
     vc->tgt_r = pos;
     vc->vel_l = vel;
@@ -56,28 +81,23 @@ void moved(Drivetrain* motors, vel_ctrl_t* vc, double dist) {
     motors->tare_position();
 }
 
-void movet(Drivetrain* motors, int time, int vel) {
-    motors->move_velocity(vel);
-    delay(time);
-    motors->move_velocity(0);
-    delay(50);
-    motors->tare_position();
-}
-
-void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist) {
+// Moves the robot in one direction for a certain distance; automatically calls `vel_ctrl`
+void movevc(Drivetrain* motors, vel_ctrl_t* vc, double dist, short brake) {
     *vc = {};
     moved(motors, vc, dist);
-    vel_ctrl(motors, vc);
+    vel_ctrl(motors, vc, brake);
     delay(50);
 }
 
-void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
+// For turning while moving; automatically calls `vel_ctrl`
+void turnvc(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle, short brake) {
     *vc = {};
     turnm(motors, vc, dist, angle);
-    vel_ctrl(motors, vc);
+    vel_ctrl(motors, vc, brake);
     delay(50);
 }
 
+// For turning while moving; must call `vel_ctrl` afterwards
 void turnm(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
     int theta = abs(angle);
     int dir = angle > 0;
@@ -89,46 +109,44 @@ void turnm(Drivetrain* motors, vel_ctrl_t* vc, double dist, int angle) {
     double rad = sqrt(dist * dist / (2.0 - 2.0 * _cos[theta]));
     double out = PI * (rad + WIDTH / 2.0) * fsign * (double)theta / 180.0;
     double in = PI * (rad - WIDTH / 2.0) * fsign * (double)theta / 180.0;
-    double vel = (double)rpm[E_MOTOR_GEAR_GREEN] * in / out;
+    double vel = (double)rpm[G] * in / out;
     vc->tgt_l = flip ? out : in;
     vc->tgt_r = flip ? in : out;
-    vc->vel_l = fsign * (flip ? rpm[E_MOTOR_GEAR_GREEN] : vel);
-    vc->vel_r = fsign * (flip ? vel : rpm[E_MOTOR_GEAR_GREEN]);
+    vc->vel_l = fsign * (flip ? rpm[G] : vel);
+    vc->vel_r = fsign * (flip ? vel : rpm[G]);
     motors->tare_position();
 }
 
+// Uses the IMU to turn towards a certain heading
 void turnh(Drivetrain* motors, Imu* gyro, double heading, int vel) {
     for (;;) {
-        if (absf(gyro->get_rotation() - (heading + 360.0)) < absf(gyro->get_rotation() - heading))
+        if (fabs(gyro->get_rotation() - (heading + 360.0)) < fabs(gyro->get_rotation() - heading))
             heading += 360.0;
-        else if (absf(gyro->get_rotation() - (heading - 360.0)) < absf(gyro->get_rotation() - heading))
+        else if (fabs(gyro->get_rotation() - (heading - 360.0)) < fabs(gyro->get_rotation() - heading))
             heading -= 360.0;
         else
             break;
     }
     int sign = (2 * (heading > gyro->get_rotation()) - 1);
     vel = abs(vel) * sign;
-    motors->lf.move_velocity(vel);
-    motors->rf.move_velocity(-vel);
-    motors->lr.move_velocity(vel);
-    motors->rr.move_velocity(-vel);
+    motors->move_l(vel);
+    motors->move_r(-vel);
     for (; sign * (heading - gyro->get_rotation()) > 65.0; delay(10));
     vel *= 0.2;
-    motors->lf.move_velocity(vel);
-    motors->rf.move_velocity(-vel);
-    motors->lr.move_velocity(vel);
-    motors->rr.move_velocity(-vel);
+    motors->move_l(vel);
+    motors->move_r(-vel);
     for (; sign * (heading - gyro->get_rotation()) > 5.0; delay(10));
     motors->move_velocity(0);
     delay(50);
     motors->tare_position();
 }
 
+// Uses the IMU to turn the robot by a certain angle
 void turn(Drivetrain* motors, Imu* gyro, double angle, int vel) {
     turnh(motors, gyro, gyro->get_rotation() + angle, vel);
 }
 
-void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {
+void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc, short brake) {
     double last_l = 0, last_r = 0;
     double new_l = 0, new_r = 0;
     double sign_l = 2 * (vc->tgt_l > 0) - 1;
@@ -136,16 +154,16 @@ void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {
     motors->tare_position();
     for (; sign_l * (vc->tgt_l - motors->lf.get_position()) > 5
         && sign_r * (vc->tgt_r - motors->rf.get_position()) > 5; delay(10)) {
-        if (sign_l * (vc->tgt_l - motors->lf.get_position()) < 200) 
-            new_l = vc->vel_l * 0.5;
-        else if (sign_l * (vc->tgt_l - motors->lf.get_position()) < 400)
-            new_l = vc->vel_l * 0.8;
+        if (sign_l * (vc->tgt_l - motors->lf.get_position()) < 150) 
+            new_l = vc->vel_l * vc->fact_2;
+        else if (sign_l * (vc->tgt_l - motors->lf.get_position()) < 300)
+            new_l = vc->vel_l * vc->fact_1;
         else
             new_l = vc->vel_l;
-        if (sign_r * (vc->tgt_r - motors->rf.get_position()) < 200)
-            new_r = vc->vel_r * 0.5;
-        else if (sign_r * (vc->tgt_r - motors->rf.get_position()) < 400)
-            new_r = vc->vel_r * 0.8;
+        if (sign_r * (vc->tgt_r - motors->rf.get_position()) < 150)
+            new_r = vc->vel_r * vc->fact_2;
+        else if (sign_r * (vc->tgt_r - motors->rf.get_position()) < 300)
+            new_r = vc->vel_r * vc->fact_1;
         else
             new_r = vc->vel_r;
         if (new_l != last_l) {
@@ -159,10 +177,14 @@ void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc) {
         last_l = new_l;
         last_r = new_r;
     }
-    motors->move_velocity(0);
+    if (brake & 0b10)
+        motors->move_l(0);
+    if (brake & 0b01)
+        motors->move_r(0);
     motors->tare_position();
 }
 
+// Uses the Vision Sensor to turn the robot until the robot is facing a Triball
 void track(Drivetrain* motors, Vision* vision, vis_params_t* vp) {
     motors->lf.move_velocity(vp->vel_l);
     motors->rf.move_velocity(vp->vel_r);
