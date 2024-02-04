@@ -26,12 +26,12 @@ using namespace pros;
 // #define ADI_WALL_R	70
 
 #define CATA_STOP		35500
-#define CATA_STOP_VEL	112
+#define CATA_STOP_VEL	100
 #define PI				3.1416
-#define SKILL_CYCLE		27500
+#define SKILL_CYCLE		31000
 
 #define AUTON_TEST_BTN E_CONTROLLER_DIGITAL_RIGHT
-#define AUTON_TESTER
+// #define AUTON_TESTER
 // #define DISABLE_IMU
 // #define SKILL_DEBUG
 
@@ -272,11 +272,12 @@ void autonomous(void) {
 		case 0:
 			_intake.set_value(1);
 			int_p = 1;
-			movevc(&drive, &vc, 950.0, 0b10);
+			movevc(&drive, &vc, 975.0, 0b10);
 			turn(&drive, &gyro, -100.0);
 			intake = -127;
 			delay(300);
 			_intake.set_value(0);
+			int_p = 0;
 			movet(&drive, 800, rpm[G]);
 			intake = 0;
 			cata_ctrl.notify();
@@ -297,48 +298,41 @@ void autonomous(void) {
 			track(&drive, &vision, &vp);
 			*/
 			movet(&drive, 350, -rpm[G]);
-			turn(&drive, &gyro, 145.0);
-			//_intake.set_value(1);
+			turn(&drive, &gyro, 70.0);
+			_intake.set_value(1);
+			int_p = 1;
+			turn(&drive, &gyro, 70.0);
 			intake = 127;
 			delay(100);
-			movevc(&drive, &vc, 200.0);
-			movevc(&drive, &vc, -200.0);
+			movevc(&drive, &vc, 180.0);
+			movevc(&drive, &vc, -180.0);
 			delay(100);
 			turnh(&drive, &gyro, 160.0);
-			movevc(&drive, &vc, 575.0, 0b01);
-			turn(&drive, &gyro, 50.0);
+			movevc(&drive, &vc, 580.0, 0b01);
+			turn(&drive, &gyro, 53.0);
 			cata_1 = 127;
 			cata_2 = 127;
-			movet(&drive, 750, rpm[G], 0b00);
+			movet(&drive, 700, rpm[G], 0b00);
 			cata_ctrl.notify();
 			drive.decel(rpm[G] / 3);
-			movet(&drive, 400, rpm[G] / 3);
+			movet(&drive, 550, rpm[G] * 2 / 5);
 			delay(300);
 			movet(&drive, 150, -rpm[G]);
-			delay(200);
+			delay(500);
 			turn(&drive, &gyro, 15.0);
-			delay(300);
-			for (int i = 0; i++ < 5; delay(50)) {
+			delay(500);
+			for (int i = 0; i++ < 6; delay(50)) {
 				cata_1 = 127;
 				cata_2 = 127;
 			}
 			cata_1 = 0;
 			cata_2 = 0;
 			delay(100);
-			/* Violates rule - revised
-			turnh(&drive, &gyro, gyro.get_rotation() + 40, rpm[G]);
-			cata_1 = 0;
-			cata_2 = 0;
-			movet(&drive, 1400, -rpm[G]);
-			_intake.set_value(0);
-			int_p = 0;
-			*/
 			turn(&drive, &gyro, -130.0);
 			_intake.set_value(0);
 			int_p = 0;
 			intake = -127;
-			movet(&drive, 1200, rpm[G]);
-			movet(&drive, 300, rpm[G] / 2);
+			movet(&drive, 1250, rpm[G]);
 			break;
 		case 1:
 			// Currently broken
@@ -355,12 +349,6 @@ void autonomous(void) {
 			movet(&drive, 100, -rpm[G]);
 			turn(&drive, &gyro, -40.0);
 			intake = -127;
-			/* Violates rule - revised
-			movet(&drive, 1500, -rpm[G]);
-			intake = 0;
-			_intake.set_value(0);
-			int_p = 0;
-			*/
 			delay(500);
 			intake = 0;
 			turn(&drive, &gyro, 180.0);
@@ -371,20 +359,14 @@ void autonomous(void) {
 			movet(&drive, 1500, rpm[G]);
 			break;
 		case 2:
-			//_intake.set_value(1);
+			_intake.set_value(1);
 			int_p = 1;
 			movet(&drive, 1200, -rpm[G]);
 			movet(&drive, 200, rpm[G]);
 			turn(&drive, &gyro, 15.0);
-			movet(&drive, 650, rpm[G]);
-			turnh(&drive, &gyro, -90.0);
-			movet(&drive, 300, rpm[G]);
-			drive.move_r(5);
-			drive.move_l(-rpm[G]);
-			delay(200);
-			movet(&drive, 275, rpm[G] / 2);
-			drive.move_r(5);
-			drive.move_l(0);
+			movet(&drive, 500, rpm[G]);
+			turn(&drive, &gyro, -80);
+			movet(&drive, 200, rpm[G]);
 #ifndef SKILL_DEBUG
 			for (int i = 0; i++ < SKILL_CYCLE / 10; delay(10)) {         
 				cata_1 = 127;
@@ -395,65 +377,48 @@ void autonomous(void) {
 			cata_1 = 0;
 			cata_2 = 0;
 #else
-			delay(100);
-			start -= SKILL_CYCLE - 100;
+			delay(1000);
+			start -= SKILL_CYCLE - 1000;
 #endif
-			/* Old code that keeps getting stuck on the bar :(
-			turnh(&drive, &gyro, 100, rpm[G]);
-			cata_1 = 0;
-			cata_2 = 0;
-			movet(&drive, 2500, rpm[G]);
-			turnh(&drive, &gyro, 60, rpm[G]);
-			movet(&drive, 1200, -rpm[G]);
-			movet(&drive, 5000, rpm[G]);
-			movet(&drive, 500, -rpm[G]);
-			turnh(&drive, &gyro, gyro.get_heading() + 180, rpm[G]);
-			movet(&drive, 1000, -rpm[G]);
-			movet(&drive, 500, rpm[G]);
-			intake = 127;
-			*/
-			turn(&drive, &gyro, -50.0);
-			movevc(&drive, &vc, -725.0);
-			turnh(&drive, &gyro, 250.0);
+			turn(&drive, &gyro, -85.0);
+			movevc(&drive, &vc, -330.0);
+			turn(&drive, &gyro, 46.0);
 			cata_ctrl.notify();
-			movevc(&drive, &vc, -1525.0);
+			gyro.set_rotation(246.0);
+			movevc(&drive, &vc, -1650.0, 0b01);
 			cata_1 = 0;
 			cata_2 = 0;
-			turnvc(&drive, &vc, -750.0, 90);
+			turnvc(&drive, &vc, -750.0, 90, 0b00);
 			movet(&drive, 1000, -rpm[G]);
 			movet(&drive, 250, rpm[G]);
-			turn(&drive, &gyro, -15.0);
+			turn(&drive, &gyro, -20.0);
 			movet(&drive, 200, rpm[G]);
-			turn(&drive, &gyro, -75.0);
-			movevc(&drive, &vc, 550.0);
-			turn(&drive, &gyro, -22.5);
-			turnvc(&drive, &vc, 900.0, -55);
-			movevc(&drive, &vc, -305);
-			turnh(&drive, &gyro, 282.0);
-			movet(&drive, 1100, -rpm[G] * 3 / 5);
+			turn(&drive, &gyro, -80.0);
+			movevc(&drive, &vc, 1100.0);
+			turnh(&drive, &gyro, 283.0);
+			movet(&drive, 900, -rpm[G] * 3 / 5);
 			movet(&drive, 500, rpm[G] / 2);
-			turnh(&drive, &gyro, 282.0);
+			turnh(&drive, &gyro, 283.0);
 			movet(&drive, 900, -rpm[G]);
-			turnh(&drive, &gyro, 290.0);
-			movet(&drive, 1000, rpm[G]);
-			turnh(&drive, &gyro, 163.0);
-			movevc(&drive, &vc, 1430.0);
-			turnh(&drive, &gyro, 220.0);
-			movet(&drive, 1100, -rpm[G] * 3 / 5);
+			turnh(&drive, &gyro, 253.0);
+			movet(&drive, 800, rpm[G]);
+			turnh(&drive, &gyro, 162.0);
+			movevc(&drive, &vc, 1200.0);
+			turnh(&drive, &gyro, 221.0);
+			movet(&drive, 900, -rpm[G] * 3 / 5);
 			movet(&drive, 500, rpm[G] / 2);
-			turnh(&drive, &gyro, 220.0);
+			turnh(&drive, &gyro, 221.0);
 			movet(&drive, 900, -rpm[G]);
 			movet(&drive, 200, rpm[G]);
-			turnh(&drive, &gyro, 230.0);
+			turnh(&drive, &gyro, 268.0);
 			movet(&drive, 1000, rpm[G]);
-			turnh(&drive, &gyro, 163.0);
-			movevc(&drive, &vc, -660);
-			turn(&drive, &gyro, 85.0);
+			turnh(&drive, &gyro, 243.0);
 			_wall.set_value(1);
-			movet(&drive, 800, -rpm[G] * 3 * 5);
+			movet(&drive, 700, -rpm[G] * 3 * 5);
 			movet(&drive, 500, rpm[G] / 2);
-			movet(&drive, 1200, -rpm[G]);
+			movet(&drive, 900, -rpm[G]);
 			movet(&drive, 300, rpm[G]);
+			_wall.set_value(0);
 			break;
 	}
 	drive.lf.set_brake_mode(def_brake);
@@ -497,15 +462,9 @@ void opcontrol(void) {
 		movet(&drive, 1200, -rpm[G]);
 		movet(&drive, 200, rpm[G]);
 		turn(&drive, &gyro, 15.0);
-		movet(&drive, 650, rpm[G]);
-		turnh(&drive, &gyro, -90.0);
-		movet(&drive, 350, rpm[G]);
-		drive.move_r(5);
-		drive.move_l(-rpm[G]);
-		delay(200);
-		drive.move_r(5);
-		movet(&drive, 275, rpm[G] / 2);
-		drive.move_l(0);
+		movet(&drive, 500, rpm[G]);
+		turn(&drive, &gyro, -80);
+		movet(&drive, 200, rpm[G]);
 	}
 	for (;; delay(10)) {
 		int l_stick = master.get_analog(E_CONTROLLER_ANALOG_LEFT_Y);
@@ -537,7 +496,7 @@ void opcontrol(void) {
 		else if (master.get_digital(E_CONTROLLER_DIGITAL_L2))
 			intake = -127;
 		else
-			intake = 0; // intake = int_m;
+			intake = 0;
 		if (!btn_r1 && master.get_digital(E_CONTROLLER_DIGITAL_R1)) {
 			btn_r1 = 1;
 			if (cata = !cata) {
@@ -572,10 +531,10 @@ void opcontrol(void) {
 		} else if (btn_r2 && !master.get_digital(E_CONTROLLER_DIGITAL_R2))
 			btn_r2 = 0;
 		if (cata && !l_stick && !r_stick) {
+#ifndef SKILL_DEBUG
 			if (program < 2)
 				drive.move_l(5);
-			else
-				drive.move_r(5);
+#endif // SKILL_DEBUG
 		}
 		else if (!cata && !l_stick && !r_stick)
 			drive.move_velocity(0);
@@ -601,23 +560,18 @@ void opcontrol(void) {
 		if (!btn_b && master.get_digital(E_CONTROLLER_DIGITAL_B)) {
 			btn_b = 1;
 			int_p = !int_p;
-			if (int_p) {
-				_intake.set_value(1);
-				_climb.set_value(1);
-			}
-			else {
-				int_p = 1;
-				_intake.set_value(0);
-				_climb.set_value(0);
-			}
+			_intake.set_value(int_p);
+			_climb.set_value(int_p);
 		} else if (btn_b && !master.get_digital(E_CONTROLLER_DIGITAL_B))
 			btn_b = 0;
 		if (!btn_y && master.get_digital(E_CONTROLLER_DIGITAL_Y)) {
 			btn_y = 1;
 			cata_hold = 1;
 			cata_stop = 1;
-			cata_1 = CATA_STOP_VEL;
-			cata_2 = CATA_STOP_VEL;
+			if (rot.get_angle() < 30000 || rot.get_angle() > CATA_STOP) {
+				cata_1 = CATA_STOP_VEL;
+				cata_2 = CATA_STOP_VEL;
+			}
 			_climb.set_value(1);
 			delay(200);
 			_climb.set_value(0);
