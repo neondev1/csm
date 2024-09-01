@@ -5,13 +5,13 @@
 
 class Drivetrain {
 public:
-    Drivetrain(int lf, int rf, int lm, int rm, int lr, int rr);
+    Drivetrain(int lf, int rf, int lr, int rr);
     void decel(int vel);
     void move_l(int vel);
     void move_r(int vel);
     void move_velocity(int vel);
     void tare_position(void);
-    pros::Motor lf, rf, lm, rm, lr, rr;
+    pros::Motor lf, rf, lr, rr;
 };
 
 typedef struct {

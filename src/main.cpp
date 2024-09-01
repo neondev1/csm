@@ -8,8 +8,6 @@ using namespace pros;
 
 #define MOTOR_LF		1
 #define MOTOR_RF		2
-#define MOTOR_LM        11
-#define MOTOR_RM        12
 #define MOTOR_LR		3
 #define MOTOR_RR		4
 #define MOTOR_INTAKE	5
@@ -41,7 +39,7 @@ using namespace pros;
 
 Controller master(E_CONTROLLER_MASTER);
 
-Drivetrain drive(MOTOR_LF, MOTOR_RF, MOTOR_LM, MOTOR_RM, MOTOR_LR, MOTOR_RR);
+Drivetrain drive(MOTOR_LF, MOTOR_RF, MOTOR_LR, MOTOR_RR);
 Motor
 	cata_1(MOTOR_CATA1, E_MOTOR_GEAR_RED, 1),
 	cata_2(MOTOR_CATA2, E_MOTOR_GEAR_RED, 0),
@@ -264,8 +262,6 @@ void autonomous(void) {
 	motor_brake_mode_e_t def_brake = drive.lf.get_brake_mode();
 	drive.lf.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
 	drive.rf.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
-    drive.lm.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
-	drive.rm.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
 	drive.lr.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
 	drive.rr.set_brake_mode(E_MOTOR_BRAKE_BRAKE);
 	drive.tare_position();
@@ -427,8 +423,6 @@ void autonomous(void) {
 	}
 	drive.lf.set_brake_mode(def_brake);
 	drive.rf.set_brake_mode(def_brake);
-    drive.lm.set_brake_mode(def_brake);
-	drive.rm.set_brake_mode(def_brake);
 	drive.lr.set_brake_mode(def_brake);
 	drive.rr.set_brake_mode(def_brake);
 	lcd::print(7, "Auto execution time: %d ms", millis() - start);
@@ -479,8 +473,6 @@ void opcontrol(void) {
 		int r_motor = dir * l_stick - r_stick;
 		drive.lf = l_motor;
 		drive.rf = r_motor;
-        drive.lm = l_motor;
-        drive.rm = r_motor;
 		drive.lr = l_motor;
 		drive.rr = r_motor;
 		/*

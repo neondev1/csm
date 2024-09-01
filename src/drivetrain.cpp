@@ -7,11 +7,9 @@
 
 using namespace pros;
 
-Drivetrain::Drivetrain(int lf, int rf, int lm, int rm, int lr, int rr) :
+Drivetrain::Drivetrain(int lf, int rf, int lr, int rr) :
     lf(lf, E_MOTOR_GEAR_GREEN, 0, E_MOTOR_ENCODER_DEGREES),
     rf(rf, E_MOTOR_GEAR_GREEN, 1, E_MOTOR_ENCODER_DEGREES),
-    lm(lm, E_MOTOR_GEAR_GREEN, 0, E_MOTOR_ENCODER_DEGREES),
-    rm(rm, E_MOTOR_GEAR_GREEN, 1, E_MOTOR_ENCODER_DEGREES),
     lr(lr, E_MOTOR_GEAR_GREEN, 0, E_MOTOR_ENCODER_DEGREES),
     rr(rr, E_MOTOR_GEAR_GREEN, 1, E_MOTOR_ENCODER_DEGREES) {
 
@@ -38,21 +36,17 @@ void Drivetrain::decel(int vel) {
 
 void Drivetrain::move_l(int vel) {
     lf.move_velocity(vel);
-    lm.move_velocity(vel);
     lr.move_velocity(vel);
 }
 
 void Drivetrain::move_r(int vel) {
     rf.move_velocity(vel);
-    rm.move_velocity(vel);
     rr.move_velocity(vel);
 }
 
 void Drivetrain::move_velocity(int vel) {
     lf.move_velocity(vel);
     rf.move_velocity(vel);
-    lm.move_velocity(vel);
-    rm.move_velocity(vel);
     lr.move_velocity(vel);
     rr.move_velocity(vel);
 }
@@ -60,8 +54,6 @@ void Drivetrain::move_velocity(int vel) {
 void Drivetrain::tare_position() {
     lf.tare_position();
     rf.tare_position();
-    lm.tare_position();
-    rm.tare_position();
     lr.tare_position();
     rr.tare_position();
 }
@@ -176,12 +168,10 @@ void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc, short brake) {
             new_r = vc->vel_r;
         if (new_l != last_l) {
             motors->lf.move_velocity((int)new_l);
-            motors->lm.move_velocity((int)new_l);
             motors->lr.move_velocity((int)new_l);
         }
         if (new_r != last_r) {
             motors->rf.move_velocity((int)new_r);
-            motors->rm.move_velocity((int)new_r);
             motors->rr.move_velocity((int)new_r);
         }
         last_l = new_l;
@@ -198,8 +188,6 @@ void vel_ctrl(Drivetrain* motors, vel_ctrl_t* vc, short brake) {
 void track(Drivetrain* motors, Vision* vision, vis_params_t* vp) {
     motors->lf.move_velocity(vp->vel_l);
     motors->rf.move_velocity(vp->vel_r);
-    motors->lm.move_velocity(vp->vel_l);
-    motors->rm.move_velocity(vp->vel_r);
     motors->lr.move_velocity(vp->vel_l);
     motors->rr.move_velocity(vp->vel_r);
     delay(vp->pre);
